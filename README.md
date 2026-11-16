@@ -1,24 +1,88 @@
-# Intern Agentic Application Assignment
+# SPIL Labs Agentic Employee Management System
 
-## Files
-- `Intern_Technical_Assignment_MCP_Agentic_Application.docx` — complete assignment brief.
-- `InternAgenticDB_Seed.sql` — SQL Server database creation and idempotent dummy data seeding script.
+Practical technical internship project implementing an end-to-end agentic application using **MCP (Model Context Protocol)** across **React, Python FastAPI, Rust, .NET 8, and Microsoft SQL Server**.
 
-## Key assignment constraints
-- No LLM or AI model integration is required or permitted for this assignment.
-- Prompt identification and tool routing must use Regex and deterministic rules in the Rust component.
-- Rust launches the .NET/C# MCP Server and connects to it using STDIO.
-- The web backend communicates with the Rust component through a documented internal REST/API interface.
-- All employee database access must go through MCP tools. The web backend must not connect directly to SQL Server.
+---
 
-## Database setup
-1. Open `InternAgenticDB_Seed.sql` in SQL Server Management Studio.
-2. Execute the script using an account with permission to create the database and tables.
-3. Confirm the result summary: 6 departments, 12 designations, and 20 employees on a fresh database.
-4. The sample data is fictitious and intended only for training.
+## 1. Mandatory Architecture
 
-## Important implementation notes
-- Keep STDOUT of the .NET MCP process reserved for MCP protocol messages; send logs to STDERR.
-- Use parameterized SQL queries.
-- Require explicit confirmation for add/update operations.
-- Do not allow arbitrary SQL execution based on prompts.
+```text
+React (Vite + TypeScript)
+       ↕  HTTP / REST JSON
+Python FastAPI (Backend Gateway)
+       ↕  Newline-Delimited JSON IPC over STDIN / STDOUT
+Rust MCP Client (Process Manager & Deterministic Regex Engine)
+       ↕  STDIO (JSON-RPC 2.0)
+.NET 8 C# MCP Server (Official MCP SDK Tool Provider)
+       ↕  Parameterized ADO.NET / Dapper
+Microsoft SQL Server (InternAgenticDB)
+```
+
+---
+
+## 2. Key Constraints & Design Rules
+
+- **Zero LLM / AI Integration**: Intent detection and parameter extraction are 100% deterministic using regular expressions and dynamic vocabulary mappings.
+- **Process Orchestration**: FastAPI manages a persistent Rust background process; Rust spawns the .NET MCP Server as a child process and communicates via STDIO.
+- **Dynamic Schema Authority**: MCP tool schemas are discovered dynamically via `tools/list` at runtime and strictly validated before tool execution.
+- **Strict Database Access Control**: Only the .NET MCP Server connects to SQL Server using parameterized queries. Web backend and Rust client have no direct SQL access.
+- **Write-Safety**: Mutating write operations (`add_employee`, `update_employee`) require explicit confirmation tokens (`CONF-XXXXXX`) before database modification.
+
+---
+
+## 3. Repository Organization
+
+```text
+Intern_Agentic_Assignment v1.0/
+├── frontend/               # React + TypeScript Chat Interface (Phase 4)
+├── backend/                # Python FastAPI Gateway & Process Orchestrator
+│   ├── app/                # Application modules (endpoints, schemas, process manager)
+│   └── tests/              # FastAPI integration tests
+├── rust-mcp-client/        # Rust MCP Client, Regex Pipeline, and STDIO Child Process Host
+│   ├── src/                # Pipeline engine, parameter extraction, protocol models
+│   ├── tests/              # Unit and integration test suites
+│   └── vocabulary.json     # Machine-readable runtime vocabulary source
+├── dotnet-mcp-server/      # C# .NET 8 MCP Server with 7 tools and ADO.NET repository
+├── database/               # SQL Server creation and idempotent seed script
+│   └── InternAgenticDB_Seed.sql
+├── docs/                   # Centralized Technical Documentation
+│   ├── ARCHITECTURE.md     # System architecture and data flow
+│   ├── API.md              # REST API endpoint specifications & examples
+│   └── vocabulary.md       # Natural-language vocabulary matrix & alias guide
+├── tests/                  # Shared / cross-cutting verification scripts
+│   └── verify_mcp_stdio.py
+├── .env.example            # Environment variable template (sanitized)
+├── .gitignore              # Multi-stack gitignore
+└── README.md               # Main project documentation
+```
+
+---
+
+## 4. Documentation Index
+
+- [Architecture & Request Lifecycle](docs/ARCHITECTURE.md)
+- [FastAPI Backend API Reference](docs/API.md)
+- [Vocabulary System & Intent Mapping](docs/vocabulary.md)
+
+---
+
+## 5. Verification Commands
+
+### .NET MCP Server
+```powershell
+cd dotnet-mcp-server
+dotnet build
+```
+
+### Rust MCP Client
+```powershell
+cd rust-mcp-client
+cargo test
+```
+
+### Python FastAPI Backend
+```powershell
+cd backend
+$env:PYTHONPATH = '.'
+pytest -v tests/test_api.py
+```

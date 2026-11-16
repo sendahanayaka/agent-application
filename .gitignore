@@ -75,3 +75,8 @@ obj/
 *~
 .DS_Store
 Thumbs.db
+
+# --- Temporary Files & Microsoft Office Lock Files ---
+~$*
+*.tmp
+*.temp
