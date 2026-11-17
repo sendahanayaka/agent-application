@@ -134,8 +134,8 @@ public class EmployeeRepository
 
             if (!string.IsNullOrWhiteSpace(designation))
             {
-                conditions.Add("g.DesignationName LIKE @Designation");
-                parameters.Add("Designation", $"%{designation.Trim()}%");
+                conditions.Add("g.DesignationName = @Designation");
+                parameters.Add("Designation", designation.Trim());
             }
 
             if (!string.IsNullOrWhiteSpace(status))
@@ -210,7 +210,7 @@ public class EmployeeRepository
         }
     }
 
-    public async Task<ToolResponse> GetEmployeeCountAsync(string? department = null, string? status = null)
+    public async Task<ToolResponse> GetEmployeeCountAsync(string? department = null, string? status = null, string? designation = null)
     {
         try
         {
@@ -229,12 +229,19 @@ public class EmployeeRepository
                 parameters.Add("Status", status.Trim());
             }
 
+            if (!string.IsNullOrWhiteSpace(designation))
+            {
+                conditions.Add("g.DesignationName = @Designation");
+                parameters.Add("Designation", designation.Trim());
+            }
+
             var whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
 
             var sql = $@"
                 SELECT COUNT(1)
                 FROM Employees e
                 INNER JOIN Departments d ON e.DepartmentID = d.DepartmentID
+                INNER JOIN Designations g ON e.DesignationID = g.DesignationID
                 {whereClause};";
 
             using var conn = CreateConnection();
@@ -242,7 +249,7 @@ public class EmployeeRepository
 
             return ToolResponse.Ok(
                 $"Total matching employees: {count}.",
-                new { count, department, status },
+                new { count, department, status, designation },
                 count
             );
         }

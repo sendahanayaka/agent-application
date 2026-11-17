@@ -132,6 +132,66 @@ impl IntentPipeline {
             };
         }
 
+        // 5b. For update_employee, validate that at least one actual update field exists (beyond employee_id)
+        for prep in &all_prepared {
+            if prep.tool_name == "update_employee" {
+                let has_update_field = prep.arguments.iter().any(|(k, _)| k != "employee_id");
+                if !has_update_field {
+                    // Check if the user attempted an unsupported EmployeeID modification (e.g. "update employee id 1038 to 1021")
+                    let id_change_re = Regex::new(r"(?i)\b(?:update|change|set)\s+(?:employee\s+)?(?:id\s+)?([0-9]{3,6})\s+to\s+([0-9]{3,6})\b").unwrap();
+                    if let Some(caps) = id_change_re.captures(trimmed) {
+                        let from_id = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                        let to_id = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+                        return PipelineResponse {
+                            status: PipelineStatus::ValidationError,
+                            prompt: trimmed.to_string(),
+                            detected_intents: vec!["update_employee".to_string()],
+                            selected_tools: vec![],
+                            message: format!(
+                                "Modifying EmployeeID (from {} to {}) is not permitted. EmployeeID is an immutable identity key in the SQL Server database. Please specify valid update fields such as phone number, email, salary, department, or designation.",
+                                from_id, to_id
+                            ),
+                            pending_operation: None,
+                            tool_executions: vec![],
+                            missing_parameters: None,
+                            ambiguous_options: None,
+                        };
+                    }
+
+                    return PipelineResponse {
+                        status: PipelineStatus::ValidationError,
+                        prompt: trimmed.to_string(),
+                        detected_intents: vec!["update_employee".to_string()],
+                        selected_tools: vec![],
+                        message: "No update fields provided. Please specify at least one valid field to update (e.g. phone, email, salary, department, designation, or status).".to_string(),
+                        pending_operation: None,
+                        tool_executions: vec![],
+                        missing_parameters: None,
+                        ambiguous_options: None,
+                    };
+                }
+            }
+        }
+        let write_ops: Vec<_> = all_prepared.iter().filter(|p| p.is_write).collect();
+        if let Some(write_call) = write_ops.first() {
+            let token = self.generate_confirmation_token();
+            let summary = self.generate_write_summary(&write_call.tool_name, &write_call.arguments);
+            let pending = PendingOperation {
+                confirmation_token: token.clone(),
+                tool_name: write_call.tool_name.clone(),
+                arguments: Value::Object(write_call.arguments.clone().into_iter().collect()),
+                summary: summary.clone(),
+                created_at_unix: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            };
+
+            // Store in pending store
+            if let Ok(mut store) = self.pending_store.lock() {
+                store.insert(token.clone(), pending.clone());
+            }
+
         // 6. Check for Write Operations (Add / Update) -> Require Explicit Confirmation
         let write_ops: Vec<_> = all_prepared.iter().filter(|p| p.is_write).collect();
         if let Some(write_call) = write_ops.first() {
@@ -167,6 +227,7 @@ impl IntentPipeline {
                 missing_parameters: None,
                 ambiguous_options: None,
             };
+        }
         }
 
         // 7. Execute Read-Only Tools Sequentially
@@ -288,8 +349,10 @@ impl IntentPipeline {
     }
 
     fn split_clauses(&self, prompt: &str) -> Vec<String> {
-        // Split on ";", " and also ", " and ", " also "
-        let re = Regex::new(r"(?i)\s*(?:;|,\s*and\s+|,\s*also\s+|\s+and\s+also\s+|\s+and\s+|\s+also\s+)\s*").unwrap();
+        // Split multi-intent compound queries on ";", " and also ", " also ", ", and "
+        // Note: Do NOT split on bare " and " because single actions have arguments joined by "and"
+        // (e.g. "Add employee ... with email X and salary Y", "Search engineers and count them")
+        let re = Regex::new(r"(?i)\s*(?:;|,\s*and\s+also\s+|,\s*also\s+|\s+and\s+also\s+|\s+also\s+|,\s*and\s+)\s*").unwrap();
         let parts: Vec<&str> = re.split(prompt).collect();
         if parts.is_empty() {
             vec![prompt.to_string()]
@@ -306,8 +369,39 @@ impl IntentPipeline {
             }
         }
 
+        // If no intent matched yet, check if this is an explicit search or listing with parameters
+        if matches.is_empty() {
+            let extractor = ParameterExtractor::new(&self.matcher);
+            let params = extractor.extract_all(clause);
+            if !params.is_empty() {
+                // If the clause mentions designations, departments, status, or names, treat as search_employees
+                if params.contains_key("department")
+                    || params.contains_key("designation")
+                    || params.contains_key("status")
+                    || params.contains_key("name")
+                {
+                    matches.push("search_employees".to_string());
+                }
+            }
+        }
+
         // Priority resolution:
-        // 1. If get_all_employees and search_employees both match:
+        // 0. Write intent priority: When add_employee or update_employee is detected,
+        // incidental search_employees or get_all_employees matches must NOT be triggered.
+        // Department and designation details are parameters of the write operation.
+        if matches.contains(&"add_employee".to_string()) {
+            matches.retain(|id| id != "search_employees" && id != "get_all_employees");
+        }
+        if matches.contains(&"update_employee".to_string()) {
+            matches.retain(|id| id != "search_employees" && id != "get_all_employees");
+        }
+
+        // 1. If get_employee_count matches, ensure count requests have priority over search_employees and get_all_employees
+        if matches.contains(&"get_employee_count".to_string()) {
+            matches.retain(|id| id != "search_employees" && id != "get_all_employees");
+        }
+
+        // 2. If get_all_employees and search_employees both match:
         //    If there is a department, designation, status or name parameter, prefer search_employees!
         //    Otherwise, prefer get_all_employees.
         if matches.contains(&"get_all_employees".to_string()) && matches.contains(&"search_employees".to_string()) {
@@ -317,6 +411,17 @@ impl IntentPipeline {
                 matches.retain(|id| id != "get_all_employees");
             } else {
                 matches.retain(|id| id != "search_employees");
+            }
+        }
+
+        // If get_all_employees matched alone, but the query contains filter parameters (e.g. "Show Engineering employees" or "Show active employees"),
+        // re-route get_all_employees to search_employees!
+        if matches.contains(&"get_all_employees".to_string()) && !matches.contains(&"search_employees".to_string()) {
+            let extractor = ParameterExtractor::new(&self.matcher);
+            let params = extractor.extract_all(clause);
+            if params.contains_key("department") || params.contains_key("designation") || params.contains_key("status") || params.contains_key("name") {
+                matches.retain(|id| id != "get_all_employees");
+                matches.push("search_employees".to_string());
             }
         }
 
@@ -395,7 +500,31 @@ impl IntentPipeline {
             }
             "update_employee" => {
                 let id = args.get("employee_id").map(|v| v.to_string()).unwrap_or_default();
-                format!("Update employee ID {} with changes: {:?}", id, args)
+                let mut changes = Vec::new();
+                for (k, v) in args {
+                    if k == "employee_id" { continue; }
+                    let label = match k.as_str() {
+                        "phone" => "Phone",
+                        "email" => "Email",
+                        "salary" => "Salary",
+                        "department_id" => "Department ID",
+                        "designation_id" => "Designation ID",
+                        "first_name" => "First Name",
+                        "last_name" => "Last Name",
+                        "status" => "Status",
+                        _ => k.as_str(),
+                    };
+                    if let Some(s) = v.as_str() {
+                        changes.push(format!("{}: '{}'", label, s));
+                    } else if let Some(n) = v.as_f64() {
+                        changes.push(format!("{}: {}", label, n));
+                    } else if let Some(i) = v.as_i64() {
+                        changes.push(format!("{}: {}", label, i));
+                    } else {
+                        changes.push(format!("{}: {}", label, v));
+                    }
+                }
+                format!("Update Employee ID {} [Set {}]", id, changes.join(", "))
             }
             _ => format!("Execute write tool {} with {:?}", tool_name, args),
         }

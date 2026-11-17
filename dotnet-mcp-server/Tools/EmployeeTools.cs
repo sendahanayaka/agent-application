@@ -55,12 +55,13 @@ public class EmployeeTools
     }
 
     [McpServerTool(Name = "get_employee_count", Title = "Get Employee Count", ReadOnly = true)]
-    [Description("Return the total count of employees, optionally filtered by department or status.")]
+    [Description("Return the total count of employees, optionally filtered by department, status, or designation.")]
     public async Task<string> GetEmployeeCount(
         [Description("Optional department name filter")] string? department = null,
-        [Description("Optional status filter (e.g. Active, On Leave)")] string? status = null)
+        [Description("Optional status filter (e.g. Active, On Leave)")] string? status = null,
+        [Description("Optional designation title filter (e.g. Software Engineer)")] string? designation = null)
     {
-        var result = await _repo.GetEmployeeCountAsync(department, status);
+        var result = await _repo.GetEmployeeCountAsync(department, status, designation);
         return JsonSerializer.Serialize(result);
     }
 

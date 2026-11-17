@@ -74,6 +74,17 @@ def test_api_full_suite():
                 assert d5["tool_executions"][0]["result"]["count"] >= 20
                 print("   PASS: get_employee_count")
 
+                # 7b. Chat: get_employee_count with designation
+                print("7b. Testing /api/chat: get_employee_count with designation...")
+                r_chat5b = await ac.post("/api/chat", json={"prompt": "Count Senior Software Engineers"})
+                assert r_chat5b.status_code == 200
+                d5b = r_chat5b.json()
+                assert d5b["status"] == "success"
+                assert d5b["selected_tools"] == ["get_employee_count"]
+                assert d5b["tool_executions"][0]["arguments"].get("designation") == "Senior Software Engineer"
+                assert d5b["tool_executions"][0]["result"]["count"] == 1
+                print("   PASS: get_employee_count with designation (Senior Software Engineer -> 1)")
+
                 # 8. Chat: Sequential Multi-Tool
                 print("8. Testing /api/chat: Multiple sequential tools...")
                 r_chat6 = await ac.post(

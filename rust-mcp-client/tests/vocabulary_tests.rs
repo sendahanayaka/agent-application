@@ -53,7 +53,7 @@ fn test_word_boundaries_and_aliases() {
     // Status alias resolution
     assert_eq!(matcher.resolve_status("Employees on leave"), Some("On Leave".to_string()));
     assert_eq!(matcher.resolve_status("Find active personnel"), Some("Active".to_string()));
-    assert_eq!(matcher.resolve_status("Show terminated workers"), Some("Terminated".to_string()));
+    assert_eq!(matcher.resolve_status("Show inactive workers"), Some("Inactive".to_string()));
 }
 
 #[test]
