@@ -76,7 +76,13 @@ class RustProcessManager:
         except Exception:
             pass
 
-    async def send_command(self, action: str, prompt: Optional[str] = None, token: Optional[str] = None) -> dict[str, Any]:
+    async def send_command(
+        self,
+        action: str,
+        prompt: Optional[str] = None,
+        token: Optional[str] = None,
+        context: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         async with self._lock:
             if self._process is None or self._process.returncode is not None:
                 logger.warning("Rust process is not running. Attempting restart...")
@@ -92,7 +98,8 @@ class RustProcessManager:
                 "id": req_id,
                 "action": action,
                 "prompt": prompt,
-                "token": token
+                "token": token,
+                "context": context,
             }
             json_line = json.dumps(payload) + "\n"
 

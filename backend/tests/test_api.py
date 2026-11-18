@@ -149,6 +149,39 @@ def test_api_full_suite():
                 )
                 print(f"   PASS: Write confirmation flow verified and cleaned up (EmployeeID {created_id})")
 
+                # 12. Conversational Memory - Follow-up Pronoun Query
+                print("12. Testing conversational memory follow-up query...")
+                conv_id = "test-session-mem-1"
+                r_mem1 = await ac.post("/api/chat", json={"prompt": "Find employee ID 1001", "conversation_id": conv_id})
+                assert r_mem1.status_code == 200
+                d_mem1 = r_mem1.json()
+                assert d_mem1["status"] == "success"
+                assert d_mem1["conversation_context"] is not None
+                assert d_mem1["conversation_context"]["last_referenced_employee_id"] == 1001
+
+                # Turn 2: "What is his phone number?"
+                r_mem2 = await ac.post("/api/chat", json={"prompt": "What is his phone number?", "conversation_id": conv_id})
+                assert r_mem2.status_code == 200
+                d_mem2 = r_mem2.json()
+                assert d_mem2["status"] == "success"
+                assert "James Wilson" in d_mem2.get("resolved_reference", "")
+                assert "077" in d_mem2.get("message", "") or "phone" in d_mem2.get("message", "").lower()
+                print("   PASS: Conversational follow-up resolved reference and retrieved phone number")
+
+                # 13. Conversational Memory - Session Reset
+                print("13. Testing conversational memory reset...")
+                r_del = await ac.delete(f"/api/conversations/{conv_id}")
+                assert r_del.status_code == 200
+                assert r_del.json()["status"] == "cleared"
+
+                # Turn 3 after reset: "What is his phone number?" should fail gracefully with no context
+                r_mem3 = await ac.post("/api/chat", json={"prompt": "What is his phone number?", "conversation_id": conv_id})
+                assert r_mem3.status_code == 200
+                d_mem3 = r_mem3.json()
+                assert d_mem3["status"] in ["validation_error", "unsupported_prompt", "missing_parameters", "no_context"]
+                assert "no previous employee" in d_mem3["message"] or "context" in d_mem3["message"].lower()
+                print("   PASS: Context cleared successfully, subsequent pronoun handled gracefully")
+
         finally:
             await rust_manager.stop()
 

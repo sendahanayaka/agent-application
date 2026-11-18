@@ -54,6 +54,12 @@ export const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ response }) 
                 {response.selected_tools.length > 0 ? response.selected_tools.join(', ') : 'None'}
               </span>
             </div>
+            {response.resolved_reference && (
+              <div className="col-span-2 bg-blue-50 dark:bg-blue-950/40 p-2 rounded-lg border border-blue-200 dark:border-blue-900/50 text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                <span className="font-semibold text-[11px]">Context Reference:</span>
+                <span className="font-mono text-[11px] font-medium">{response.resolved_reference}</span>
+              </div>
+            )}
             {response.missing_parameters && response.missing_parameters.length > 0 && (
               <div className="col-span-2 text-rose-600 dark:text-rose-400 flex items-center gap-1">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />

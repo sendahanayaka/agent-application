@@ -19,13 +19,13 @@ export const apiClient = {
     return res.json();
   },
 
-  async sendChat(prompt: string): Promise<PipelineResponseModel> {
+  async sendChat(prompt: string, conversationId?: string): Promise<PipelineResponseModel> {
     const res = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, conversation_id: conversationId }),
     });
 
     const data = await res.json();
@@ -35,13 +35,13 @@ export const apiClient = {
     return data;
   },
 
-  async confirmOperation(token: string): Promise<PipelineResponseModel> {
+  async confirmOperation(token: string, conversationId?: string): Promise<PipelineResponseModel> {
     const res = await fetch(`${API_BASE_URL}/confirm`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, conversation_id: conversationId }),
     });
 
     const data = await res.json();
@@ -49,5 +49,14 @@ export const apiClient = {
       throw new Error(data.detail || data.error || `Confirmation failed: ${res.status}`);
     }
     return data;
+  },
+
+  async clearConversation(conversationId: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/conversations/${encodeURIComponent(conversationId)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      console.warn(`Failed to clear session ${conversationId}: ${res.status}`);
+    }
   },
 };

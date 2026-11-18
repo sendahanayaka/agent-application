@@ -63,3 +63,39 @@ Maps common and plural job titles to canonical designations:
 - **Salary**: Dollar or decimal amounts preceded by `salary`, `pay`, `compensation`, or `$`.
 - **Email**: Standard RFC-compliant email regex.
 - **Phone**: Phone format parser supporting `+`, hyphens, brackets, and whitespace.
+
+---
+
+## 4. Deterministic Conversational Memory & Reference Resolution
+
+The Rust MCP Client incorporates a deterministic reference resolver that tracks conversation context per `conversation_id`:
+
+1. **Context Population**:
+   - Every successful execution of `get_employee_by_id`, `search_employees`, or `get_all_employees` captures the retrieved employees into the session state.
+   - Singlet queries populate `last_referenced_employee` and `last_referenced_employee_id`.
+   - Multi-record queries populate `last_employees_collection`.
+
+2. **Pronoun & Anaphora Support**:
+   - Singular masculine: `he`, `him`, `his`
+   - Singular feminine: `she`, `her`, `hers`
+   - Gender-neutral / demonstrative: `that employee`, `the employee`, `this employee`, `them`, `their`
+   - Plural collection: `they`, `them`, `their`, `all of them`, `these employees`
+
+3. **Supported Follow-Up Queries**:
+   - Field inquiries: `phone`, `email`, `department`, `designation`, `salary`, `name`, `status`.
+   - Conversational updates: e.g. *"Update his phone number to 0771231234"*, *"Change his department to IT"*.
+   - Collection inquiries: e.g. *"What are their phone numbers?"*, *"What are their names?"*.
+
+4. **Ambiguity & Missing Context Safety**:
+   - If a pronoun is used without preceding employee context, the system returns a friendly `validation_error` prompting the user to specify an employee.
+   - If multiple candidates match a gendered pronoun, the system reports ambiguity and lists the candidate names.
+
+---
+
+## 5. Dynamic MCP Tool Registry & Discovery
+
+All 7 MCP tools expose their dynamic JSON input schemas over STDIO / JSON-RPC:
+- **`get_employee_count`**: accepts `department`, `status`, and `designation`.
+- **`update_employee`**: accepts `employee_id`, `first_name`, `last_name`, `email`, `phone`, `department_id`, `designation_id`, `salary`, and `status`.
+- **`add_employee`**: accepts required parameters (`first_name`, `last_name`, `email`, `salary`, `department_id`, `designation_id`) and optional fields (`phone`).
+- The frontend dynamically renders parameter types, descriptions, and required indicators directly from discovered MCP schemas.

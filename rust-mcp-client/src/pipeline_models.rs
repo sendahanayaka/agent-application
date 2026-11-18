@@ -35,6 +35,35 @@ pub struct SingleToolExecution {
     pub error: Option<String>,
 }
 
+/// Extracted conversational employee entity for context tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextEmployee {
+    pub employee_id: i32,
+    pub first_name: String,
+    pub last_name: String,
+    pub full_name: String,
+    pub department: Option<String>,
+    pub designation: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub salary: Option<f64>,
+    pub status: Option<String>,
+    pub gender: Option<String>, // "male" or "female" inferred from first name if unambiguous
+}
+
+/// Session-based conversational memory context
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ConversationContext {
+    pub conversation_id: String,
+    pub last_referenced_employee_id: Option<i32>,
+    pub last_referenced_employee: Option<ContextEmployee>,
+    pub last_employees_collection: Vec<ContextEmployee>,
+    pub last_selected_department: Option<String>,
+    pub last_search_filters: HashMap<String, Value>,
+    pub last_intent: Option<String>,
+    pub last_tool: Option<String>,
+}
+
 /// The main structured response sent to callers (such as Python FastAPI backend)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineResponse {
@@ -51,6 +80,10 @@ pub struct PipelineResponse {
     pub missing_parameters: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ambiguous_options: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_reference: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_context: Option<ConversationContext>,
 }
 
 /// Candidate tool call before execution

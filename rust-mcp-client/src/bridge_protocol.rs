@@ -1,3 +1,4 @@
+use crate::pipeline_models::ConversationContext;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -9,6 +10,8 @@ pub struct BridgeRequest {
     pub prompt: Option<String>,
     #[serde(default)]
     pub token: Option<String>,
+    #[serde(default)]
+    pub context: Option<ConversationContext>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

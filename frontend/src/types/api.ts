@@ -15,7 +15,7 @@ export interface PendingOperation {
 }
 
 export interface PipelineResponseModel {
-  status: 'success' | 'confirmation_required' | 'partial_success' | 'clarification_needed' | 'unsupported_prompt' | 'error';
+  status: 'success' | 'confirmation_required' | 'partial_success' | 'clarification_needed' | 'unsupported_prompt' | 'missing_parameters' | 'validation_error' | 'no_context' | 'error';
   prompt: string;
   detected_intents: string[];
   selected_tools: string[];
@@ -24,6 +24,8 @@ export interface PipelineResponseModel {
   tool_executions: SingleToolExecution[];
   missing_parameters?: string[] | null;
   ambiguous_options?: string[] | null;
+  resolved_reference?: string | null;
+  conversation_context?: any | null;
 }
 
 export interface HealthResponse {

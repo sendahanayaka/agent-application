@@ -115,7 +115,7 @@ fn main() {
             },
             "chat" => {
                 let prompt = req.prompt.unwrap_or_default();
-                let pipeline_res = pipeline.process_prompt(&prompt, &mut client);
+                let pipeline_res = pipeline.process_prompt_with_context(&prompt, &req.context, &mut client);
                 BridgeResponse {
                     id: req.id,
                     success: true,

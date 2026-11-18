@@ -91,6 +91,9 @@ export const App: React.FC = () => {
     setIsDark((prev) => !prev);
   };
 
+  const [conversationId, setConversationId] = useState<string>(
+    () => `conv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -181,7 +184,7 @@ export const App: React.FC = () => {
 
     try {
       setProcessingStep('Executing parameterized MCP tool on SQL Server...');
-      const response = await apiClient.sendChat(promptToSend);
+      const response = await apiClient.sendChat(promptToSend, conversationId);
 
       const humanText = cleanAssistantText(response.message, response.tool_executions);
 
@@ -219,7 +222,7 @@ export const App: React.FC = () => {
   const handleDirectConfirm = async (token: string) => {
     setIsConfirming(true);
     try {
-      const response = await apiClient.confirmOperation(token);
+      const response = await apiClient.confirmOperation(token, conversationId);
       const humanText = cleanAssistantText(response.message, response.tool_executions);
 
       const confirmationResultMessage: ChatMessage = {
@@ -245,6 +248,25 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleNewConversation = async () => {
+    try {
+      await apiClient.clearConversation(conversationId);
+    } catch (err) {
+      console.warn('Error clearing session context on backend:', err);
+    }
+    const newId = `conv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    setConversationId(newId);
+    setPendingConfirmation(null);
+    setMessages([
+      {
+        id: `welcome-${Date.now()}`,
+        sender: 'assistant',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        text: "Started a new conversation session.\n\nSession memory has been reset. How can I help you manage employee records today?",
+      },
+    ]);
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F6F8] dark:bg-[#12131A] text-[#252525] dark:text-[#F5F6FA] flex flex-col font-sans transition-colors duration-200">
       {/* 1. System Health Header with Theme Switcher */}
@@ -257,6 +279,7 @@ export const App: React.FC = () => {
         }}
         isDark={isDark}
         onToggleTheme={toggleTheme}
+        onNewConversation={handleNewConversation}
       />
 
       {/* 2. MCP Tools Registry Bar */}
@@ -310,6 +333,14 @@ export const App: React.FC = () => {
                           : 'bg-slate-50 dark:bg-darkbg-secondary/70 text-slate-800 dark:text-darktext-base border border-slate-200 dark:border-darkbg-border rounded-tl-xs'
                       }`}
                     >
+                      {/* Context Resolution Badge */}
+                      {!isUser && msg.pipelineResponse?.resolved_reference && (
+                        <div className="mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/50">
+                          <span className="font-semibold">Context Resolved:</span>
+                          <span className="font-mono">{msg.pipelineResponse.resolved_reference}</span>
+                        </div>
+                      )}
+
                       {/* Text Content */}
                       <div className="whitespace-pre-wrap font-normal">{msg.text}</div>
 

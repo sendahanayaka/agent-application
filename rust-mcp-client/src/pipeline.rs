@@ -3,9 +3,11 @@ use crate::extractor::ParameterExtractor;
 use crate::matcher::VocabularyMatcher;
 use crate::models::Vocabulary;
 use crate::pipeline_models::{
-    PendingOperation, PipelineResponse, PipelineStatus, PreparedToolCall, SingleToolExecution,
+    ConversationContext, PendingOperation, PipelineResponse, PipelineStatus,
+    PreparedToolCall, SingleToolExecution,
 };
 use crate::protocol::McpTool;
+use crate::resolver::{ReferenceResolutionResult, ReferenceResolver};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -26,10 +28,20 @@ impl IntentPipeline {
         })
     }
 
-    /// Process a natural language prompt or confirmation
+    /// Process a natural language prompt or confirmation with session context
     pub fn process_prompt(
         &self,
         prompt: &str,
+        client: &mut StdioMcpClient,
+    ) -> PipelineResponse {
+        self.process_prompt_with_context(prompt, &None, client)
+    }
+
+    /// Process prompt with conversation context for follow-up reference resolution
+    pub fn process_prompt_with_context(
+        &self,
+        prompt: &str,
+        context: &Option<ConversationContext>,
         client: &mut StdioMcpClient,
     ) -> PipelineResponse {
         let trimmed = prompt.trim();
@@ -39,8 +51,185 @@ impl IntentPipeline {
             return self.execute_confirmed_operation(&token, client);
         }
 
-        // 2. Break compound queries ("and", ";", "also") into sub-clauses
-        let clauses = self.split_clauses(trimmed);
+        // 2. Deterministic Anaphoric Reference Resolution (he, she, they, his, her, their, that employee)
+        let mut resolved_reference_label: Option<String> = None;
+        let effective_prompt: String;
+
+        match ReferenceResolver::resolve(trimmed, context) {
+            ReferenceResolutionResult::FieldQuery { employee_id, resolved_label, target_field } => {
+                resolved_reference_label = Some(resolved_label.clone());
+                // Call get_employee_by_id on MCP server to get fresh data
+                let args = json!({ "employee_id": employee_id });
+                match client.call_tool("get_employee_by_id", args.clone()) {
+                    Ok(raw_result) => {
+                        let parsed = self.extract_tool_content(&raw_result);
+                        let emp_list = ReferenceResolver::extract_employees_from_result("get_employee_by_id", &parsed);
+                        let mut new_ctx = context.clone().unwrap_or_default();
+                        if let Some(first) = emp_list.first() {
+                            new_ctx.last_referenced_employee_id = Some(first.employee_id);
+                            new_ctx.last_referenced_employee = Some(first.clone());
+                            new_ctx.last_employees_collection = vec![first.clone()];
+                            new_ctx.last_intent = Some("get_employee_by_id".to_string());
+                            new_ctx.last_tool = Some("get_employee_by_id".to_string());
+                        }
+
+                        // Human friendly answer for the specific queried field
+                        let data = parsed.get("data").unwrap_or(&parsed);
+                        let field_val = match target_field.as_str() {
+                            "phone" => data.get("Phone").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
+                            "email" => data.get("Email").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
+                            "department" => data.get("DepartmentName").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
+                            "designation" => data.get("DesignationName").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
+                            "salary" => data.get("Salary").map(|v| format!("${}", v)).unwrap_or("None listed".to_string()),
+                            "name" => format!("{} {}", data.get("FirstName").and_then(|v| v.as_str()).unwrap_or(""), data.get("LastName").and_then(|v| v.as_str()).unwrap_or("")).trim().to_string(),
+                            "status" => data.get("Status").and_then(|v| v.as_str()).unwrap_or("Active").to_string(),
+                            _ => format!("Employee ID: {}", employee_id),
+                        };
+
+                        let label_desc = match target_field.as_str() {
+                            "phone" => "phone number",
+                            "email" => "email address",
+                            "department" => "department",
+                            "designation" => "designation",
+                            "salary" => "annual salary",
+                            "name" => "name",
+                            "status" => "status",
+                            _ => "details",
+                        };
+
+                        let emp_name = data.get("FirstName").and_then(|v| v.as_str()).unwrap_or("Employee");
+                        let message = format!("{}'s {} is {}.", emp_name, label_desc, field_val);
+
+                        return PipelineResponse {
+                            status: PipelineStatus::Success,
+                            prompt: trimmed.to_string(),
+                            detected_intents: vec!["get_employee_by_id".to_string()],
+                            selected_tools: vec!["get_employee_by_id".to_string()],
+                            message,
+                            pending_operation: None,
+                            tool_executions: vec![SingleToolExecution {
+                                tool_name: "get_employee_by_id".to_string(),
+                                arguments: args,
+                                success: true,
+                                result: Some(parsed),
+                                error: None,
+                            }],
+                            missing_parameters: None,
+                            ambiguous_options: None,
+                            resolved_reference: resolved_reference_label,
+                            conversation_context: Some(new_ctx),
+                        };
+                    }
+                    Err(e) => {
+                        return PipelineResponse {
+                            status: PipelineStatus::ExecutionError,
+                            prompt: trimmed.to_string(),
+                            detected_intents: vec!["get_employee_by_id".to_string()],
+                            selected_tools: vec!["get_employee_by_id".to_string()],
+                            message: format!("Failed to retrieve employee {}: {}", employee_id, e),
+                            pending_operation: None,
+                            tool_executions: vec![],
+                            missing_parameters: None,
+                            ambiguous_options: None,
+                            resolved_reference: resolved_reference_label,
+                            conversation_context: context.clone(),
+                        };
+                    }
+                }
+            }
+            ReferenceResolutionResult::CollectionFieldQuery { employee_ids, resolved_label, target_field } => {
+                resolved_reference_label = Some(resolved_label.clone());
+                // For each employee in collection, fetch current fresh record
+                let mut executions = Vec::new();
+                let mut lines = Vec::new();
+
+                for emp_id in &employee_ids {
+                    let args = json!({ "employee_id": emp_id });
+                    if let Ok(raw_result) = client.call_tool("get_employee_by_id", args.clone()) {
+                        let parsed = self.extract_tool_content(&raw_result);
+                        let data = parsed.get("data").unwrap_or(&parsed);
+                        let name = format!("{} {}", data.get("FirstName").and_then(|v| v.as_str()).unwrap_or(""), data.get("LastName").and_then(|v| v.as_str()).unwrap_or("")).trim().to_string();
+                        let field_val = match target_field.as_str() {
+                            "phone" => data.get("Phone").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
+                            "email" => data.get("Email").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
+                            "department" => data.get("DepartmentName").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
+                            "designation" => data.get("DesignationName").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
+                            "salary" => data.get("Salary").map(|v| format!("${}", v)).unwrap_or("None listed".to_string()),
+                            "name" => name.clone(),
+                            _ => format!("Employee ID: {}", emp_id),
+                        };
+                        lines.push(format!("• {}: {}", name, field_val));
+                        executions.push(SingleToolExecution {
+                            tool_name: "get_employee_by_id".to_string(),
+                            arguments: args,
+                            success: true,
+                            result: Some(parsed),
+                            error: None,
+                        });
+                    }
+                }
+
+                let message = if lines.is_empty() {
+                    "No records found for the referenced employees.".to_string()
+                } else {
+                    format!("Here are their {}:\n{}", target_field, lines.join("\n"))
+                };
+
+                return PipelineResponse {
+                    status: PipelineStatus::Success,
+                    prompt: trimmed.to_string(),
+                    detected_intents: vec!["get_employee_by_id".to_string()],
+                    selected_tools: vec!["get_employee_by_id".to_string()],
+                    message,
+                    pending_operation: None,
+                    tool_executions: executions,
+                    missing_parameters: None,
+                    ambiguous_options: None,
+                    resolved_reference: resolved_reference_label,
+                    conversation_context: context.clone(),
+                };
+            }
+            ReferenceResolutionResult::UpdateAction { resolved_label, modified_prompt, .. } => {
+                resolved_reference_label = Some(resolved_label);
+                effective_prompt = modified_prompt;
+            }
+            ReferenceResolutionResult::Ambiguous { message, options } => {
+                return PipelineResponse {
+                    status: PipelineStatus::AmbiguousIntent,
+                    prompt: trimmed.to_string(),
+                    detected_intents: vec![],
+                    selected_tools: vec![],
+                    message,
+                    pending_operation: None,
+                    tool_executions: vec![],
+                    missing_parameters: None,
+                    ambiguous_options: Some(options),
+                    resolved_reference: None,
+                    conversation_context: context.clone(),
+                };
+            }
+            ReferenceResolutionResult::NoContext { message } => {
+                return PipelineResponse {
+                    status: PipelineStatus::ValidationError,
+                    prompt: trimmed.to_string(),
+                    detected_intents: vec![],
+                    selected_tools: vec![],
+                    message,
+                    pending_operation: None,
+                    tool_executions: vec![],
+                    missing_parameters: None,
+                    ambiguous_options: None,
+                    resolved_reference: None,
+                    conversation_context: context.clone(),
+                };
+            }
+            ReferenceResolutionResult::NotApplicable => {
+                effective_prompt = trimmed.to_string();
+            }
+        }
+
+        // 3. Break compound queries ("and", ";", "also") into sub-clauses
+        let clauses = self.split_clauses(&effective_prompt);
 
         let mut all_prepared = Vec::new();
         let mut ambiguous_candidates = Vec::new();
@@ -86,6 +275,8 @@ impl IntentPipeline {
                 tool_executions: vec![],
                 missing_parameters: None,
                 ambiguous_options: Some(ambiguous_candidates),
+                resolved_reference: resolved_reference_label,
+                conversation_context: context.clone(),
             };
         }
 
@@ -101,6 +292,8 @@ impl IntentPipeline {
                 tool_executions: vec![],
                 missing_parameters: None,
                 ambiguous_options: None,
+                resolved_reference: resolved_reference_label,
+                conversation_context: context.clone(),
             };
         }
 
@@ -129,6 +322,8 @@ impl IntentPipeline {
                 tool_executions: vec![],
                 missing_parameters: Some(all_missing),
                 ambiguous_options: None,
+                resolved_reference: resolved_reference_label,
+                conversation_context: context.clone(),
             };
         }
 
@@ -155,6 +350,8 @@ impl IntentPipeline {
                             tool_executions: vec![],
                             missing_parameters: None,
                             ambiguous_options: None,
+                            resolved_reference: resolved_reference_label,
+                            conversation_context: context.clone(),
                         };
                     }
 
@@ -168,30 +365,12 @@ impl IntentPipeline {
                         tool_executions: vec![],
                         missing_parameters: None,
                         ambiguous_options: None,
+                        resolved_reference: resolved_reference_label,
+                        conversation_context: context.clone(),
                     };
                 }
             }
         }
-        let write_ops: Vec<_> = all_prepared.iter().filter(|p| p.is_write).collect();
-        if let Some(write_call) = write_ops.first() {
-            let token = self.generate_confirmation_token();
-            let summary = self.generate_write_summary(&write_call.tool_name, &write_call.arguments);
-            let pending = PendingOperation {
-                confirmation_token: token.clone(),
-                tool_name: write_call.tool_name.clone(),
-                arguments: Value::Object(write_call.arguments.clone().into_iter().collect()),
-                summary: summary.clone(),
-                created_at_unix: SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            };
-
-            // Store in pending store
-            if let Ok(mut store) = self.pending_store.lock() {
-                store.insert(token.clone(), pending.clone());
-            }
-
         // 6. Check for Write Operations (Add / Update) -> Require Explicit Confirmation
         let write_ops: Vec<_> = all_prepared.iter().filter(|p| p.is_write).collect();
         if let Some(write_call) = write_ops.first() {
@@ -226,8 +405,9 @@ impl IntentPipeline {
                 tool_executions: vec![],
                 missing_parameters: None,
                 ambiguous_options: None,
+                resolved_reference: resolved_reference_label,
+                conversation_context: context.clone(),
             };
-        }
         }
 
         // 7. Execute Read-Only Tools Sequentially
@@ -261,6 +441,37 @@ impl IntentPipeline {
             }
         }
 
+        // Build updated conversation context from execution results
+        let mut updated_ctx = context.clone().unwrap_or_default();
+        if all_succeeded && !executions.is_empty() {
+            let mut all_extracted_employees = Vec::new();
+            for exec in &executions {
+                if let Some(res) = &exec.result {
+                    let emps = ReferenceResolver::extract_employees_from_result(&exec.tool_name, res);
+                    all_extracted_employees.extend(emps);
+                }
+            }
+
+            if !all_extracted_employees.is_empty() {
+                if all_extracted_employees.len() == 1 {
+                    updated_ctx.last_referenced_employee_id = Some(all_extracted_employees[0].employee_id);
+                    updated_ctx.last_referenced_employee = Some(all_extracted_employees[0].clone());
+                } else {
+                    updated_ctx.last_referenced_employee_id = None;
+                    updated_ctx.last_referenced_employee = None;
+                }
+                updated_ctx.last_employees_collection = all_extracted_employees;
+            }
+
+            if let Some(first_prep) = all_prepared.first() {
+                updated_ctx.last_intent = Some(first_prep.intent_id.clone());
+                updated_ctx.last_tool = Some(first_prep.tool_name.clone());
+                if let Some(dept_val) = first_prep.arguments.get("department").and_then(|v| v.as_str()) {
+                    updated_ctx.last_selected_department = Some(dept_val.to_string());
+                }
+            }
+        }
+
         PipelineResponse {
             status: if all_succeeded {
                 PipelineStatus::Success
@@ -275,6 +486,8 @@ impl IntentPipeline {
             tool_executions: executions,
             missing_parameters: None,
             ambiguous_options: None,
+            resolved_reference: resolved_reference_label,
+            conversation_context: Some(updated_ctx),
         }
     }
 
@@ -310,6 +523,8 @@ impl IntentPipeline {
                             }],
                             missing_parameters: None,
                             ambiguous_options: None,
+                            resolved_reference: None,
+                            conversation_context: None,
                         }
                     }
                     Err(err) => PipelineResponse {
@@ -328,6 +543,8 @@ impl IntentPipeline {
                         }],
                         missing_parameters: None,
                         ambiguous_options: None,
+                        resolved_reference: None,
+                        conversation_context: None,
                     },
                 }
             }
@@ -344,6 +561,8 @@ impl IntentPipeline {
                 tool_executions: vec![],
                 missing_parameters: None,
                 ambiguous_options: None,
+                resolved_reference: None,
+                conversation_context: None,
             },
         }
     }

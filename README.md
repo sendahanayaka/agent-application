@@ -1,6 +1,6 @@
-# SPIL Labs Agentic Employee Management System
+# Employee Management System
 
-Practical technical internship project implementing an end-to-end agentic application using **MCP (Model Context Protocol)** across **React, Python FastAPI, Rust, .NET 8, and Microsoft SQL Server**.
+Enterprise agentic application implementing Model Context Protocol (**MCP**) across **React, Python FastAPI, Rust, .NET 8, and Microsoft SQL Server**.
 
 ---
 
