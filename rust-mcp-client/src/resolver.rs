@@ -101,12 +101,14 @@ impl ReferenceResolver {
 
         // 4. Check for field inquiry (e.g. "What is his phone number?", "Which department does he work in?", "What is his salary?")
         let field_re = Regex::new(
-            r"(?i)\b(phone(?:\s*numbers?|\s*number)?|emails?(?:\s*address(?:es)?)?|departments?|designations?|titles?|roles?|salar(?:y|ies)|pay|compensation|names?|status(?:es)?)\b"
+            r"(?i)\b(hire(?:d|\s+dates?)?|start\s+dates?|join(?:ed)?|phone(?:\s*numbers?|\s*number)?|emails?(?:\s*address(?:es)?)?|departments?|designations?|titles?|roles?|salar(?:y|ies)|pay|compensation|names?|status(?:es)?)\b"
         ).unwrap();
 
         let target_field = if let Some(fc) = field_re.captures(trimmed) {
             let f = fc.get(1).unwrap().as_str().to_lowercase();
-            if f.starts_with("phone") {
+            if f.starts_with("hire") || f.starts_with("start") || f.starts_with("join") {
+                "hire_date"
+            } else if f.starts_with("phone") {
                 "phone"
             } else if f.starts_with("email") {
                 "email"

@@ -7,11 +7,14 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Google Sans"', '"Segoe UI"', 'sans-serif'],
+      },
       colors: {
         primary: {
-          DEFAULT: '#08006C',
-          light: '#13098C',
-          dark: '#05004A',
+          DEFAULT: '#14634e',
+          light: '#0e5240',
+          dark: '#0c4036',
         },
         accent: {
           DEFAULT: '#FD5901',
@@ -19,14 +22,14 @@ export default {
           light: '#FFF0E8',
         },
         darkbg: {
-          base: '#12131A',
-          surface: '#1D1F2B',
-          secondary: '#262938',
-          border: '#32364A',
+          base: '#142019',
+          surface: '#19251f',
+          secondary: '#223028',
+          border: '#35473b',
         },
         darktext: {
-          base: '#F5F6FA',
-          muted: '#A6AABD',
+          base: '#e4eee6',
+          muted: '#b2c2b8',
         }
       }
     },

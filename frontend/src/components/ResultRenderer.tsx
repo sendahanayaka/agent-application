@@ -1,4 +1,5 @@
 import React from 'react';
+import { ExpandableTable } from './ExpandableTable';
 import {
   Users,
   Search,
@@ -78,13 +79,13 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
   if (toolName === 'get_employee_count') {
     const finalCount = typeof data === 'number' ? data : (count ?? (typeof raw === 'number' ? raw : 0));
     return (
-      <div className="my-2.5 p-4 rounded-xl bg-white dark:bg-darkbg-surface border border-slate-200 dark:border-darkbg-border shadow-xs inline-flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-primary/10 dark:bg-primary-light/20 text-primary dark:text-orange-400 flex items-center justify-center font-bold text-xl">
+      <div className="my-2.5 p-4 rounded-2xl bg-white dark:bg-darkbg-surface border border-slate-200 dark:border-darkbg-border shadow-xs inline-flex items-center gap-4">
+        <div className="w-12 h-12 rounded-2xl bg-primary/10 dark:bg-primary-light/20 text-primary dark:text-emerald-300 flex items-center justify-center font-bold text-xl">
           {finalCount}
         </div>
         <div>
           <div className="text-xs font-semibold text-slate-800 dark:text-darktext-base">
-            Total Employee Headcount
+            Employee headcount
           </div>
           <div className="text-[11px] text-slate-500 dark:text-darktext-muted mt-0.5">
             {message || 'Matching employee records currently in the system'}
@@ -109,7 +110,7 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
     const isOnLeave = emp.Status === 'On Leave';
 
     return (
-      <div className="my-2.5 overflow-hidden rounded-xl bg-white dark:bg-darkbg-surface border border-slate-200 dark:border-darkbg-border shadow-xs text-xs">
+      <div className="my-2.5 overflow-hidden rounded-2xl bg-white dark:bg-darkbg-surface border border-slate-200 dark:border-darkbg-border shadow-xs text-xs">
         {/* Card Header */}
         <div className="p-3.5 border-b border-slate-100 dark:border-darkbg-border bg-slate-50/70 dark:bg-darkbg-secondary flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -126,7 +127,7 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] bg-slate-200/80 dark:bg-darkbg-surface px-2 py-0.5 rounded text-slate-600 dark:text-darktext-muted">
+            <span className="whitespace-nowrap font-mono text-[11px] bg-slate-200/80 dark:bg-darkbg-surface px-2 py-0.5 rounded text-slate-600 dark:text-darktext-muted">
               ID: {emp.EmployeeID}
             </span>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -168,15 +169,15 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
   if (toolName === 'get_department_list' || (Array.isArray(data) && data[0]?.DepartmentName && !data[0]?.FirstName)) {
     const list: Department[] = Array.isArray(data) ? data : [];
     return (
-      <div className="my-2.5 overflow-hidden rounded-xl border border-slate-200 dark:border-darkbg-border bg-white dark:bg-darkbg-surface shadow-xs">
-        <div className="bg-slate-50 dark:bg-darkbg-secondary px-3.5 py-2.5 text-xs font-semibold text-slate-700 dark:text-darktext-base border-b border-slate-200 dark:border-darkbg-border flex items-center justify-between">
+      <ExpandableTable
+        title={`Departments (${list.length})`}
+        heading={
           <span className="flex items-center gap-1.5">
-            <Building className="w-3.5 h-3.5 text-primary dark:text-orange-400" />
+            <Building className="w-3.5 h-3.5 text-primary dark:text-emerald-300" />
             <span>Departments ({list.length})</span>
           </span>
-          <span className="text-[11px] font-normal text-slate-400 dark:text-darktext-muted">Master Records</span>
-        </div>
-        <div className="overflow-x-auto">
+        }
+      >
           <table className="w-full text-left text-xs text-slate-700 dark:text-darktext-base">
             <thead className="bg-slate-100/75 dark:bg-darkbg-surface text-[11px] font-semibold text-slate-500 dark:text-darktext-muted uppercase border-b border-slate-200 dark:border-darkbg-border">
               <tr>
@@ -195,8 +196,7 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
+      </ExpandableTable>
     );
   }
 
@@ -206,7 +206,7 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
 
     if (employees.length === 0) {
       return (
-        <div className="my-2.5 p-3.5 text-xs text-slate-600 dark:text-darktext-muted bg-slate-50 dark:bg-darkbg-surface rounded-xl border border-slate-200 dark:border-darkbg-border flex items-center gap-2">
+        <div className="my-2.5 p-3.5 text-xs text-slate-600 dark:text-darktext-muted bg-slate-50 dark:bg-darkbg-surface rounded-2xl border border-slate-200 dark:border-darkbg-border flex items-center gap-2">
           <Search className="w-4 h-4 text-slate-400" />
           <span>
             {toolName === 'search_employees'
@@ -218,29 +218,24 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
     }
 
     return (
-      <div className="my-2.5 overflow-hidden rounded-xl border border-slate-200 dark:border-darkbg-border bg-white dark:bg-darkbg-surface shadow-xs">
-        {/* Table Summary Bar */}
-        <div className="bg-slate-50 dark:bg-darkbg-secondary px-3.5 py-2.5 text-xs font-semibold text-slate-700 dark:text-darktext-base border-b border-slate-200 dark:border-darkbg-border flex items-center justify-between">
+      <ExpandableTable
+        title={toolName === 'search_employees' ? 'Search Results' : 'Employee Directory'}
+        heading={
           <span className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-primary dark:text-orange-400" />
+            <Users className="w-4 h-4 text-primary dark:text-emerald-300" />
             <span>
               {toolName === 'search_employees' ? 'Search Results' : 'Employee Directory'}
             </span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 dark:bg-orange-500/20 text-primary dark:text-orange-400">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 dark:bg-emerald-500/20 text-primary dark:text-emerald-300">
               {employees.length} {employees.length === 1 ? 'record' : 'records'}
             </span>
           </span>
-          <span className="text-[11px] font-normal text-slate-400 dark:text-darktext-muted">
-            SQL Server
-          </span>
-        </div>
-
-        {/* Scrollable Data Table */}
-        <div className="overflow-x-auto max-h-80">
+        }
+      >
           <table className="w-full text-left text-xs text-slate-700 dark:text-darktext-base">
             <thead className="bg-slate-100/80 dark:bg-darkbg-surface text-[10px] font-semibold text-slate-500 dark:text-darktext-muted uppercase border-b border-slate-200 dark:border-darkbg-border sticky top-0 z-10 backdrop-blur-xs">
               <tr>
-                <th className="px-3 py-2 w-14">ID</th>
+                <th className="px-3 py-2 w-14 whitespace-nowrap">ID</th>
                 <th className="px-3 py-2">Full Name</th>
                 <th className="px-3 py-2">Department</th>
                 <th className="px-3 py-2">Designation</th>
@@ -257,29 +252,29 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
                   key={emp.EmployeeID}
                   className="hover:bg-slate-50/80 dark:hover:bg-darkbg-secondary/60 transition-colors"
                 >
-                  <td className="px-3 py-2.5 font-mono font-medium text-slate-500 dark:text-darktext-muted">{emp.EmployeeID}</td>
-                  <td className="px-3 py-2.5 font-semibold text-slate-900 dark:text-darktext-base whitespace-nowrap">
+                  <td className="px-3 py-3 whitespace-nowrap font-mono font-medium text-slate-500 dark:text-darktext-muted">{emp.EmployeeID}</td>
+                  <td className="px-3 py-3 font-semibold text-slate-900 dark:text-darktext-base whitespace-nowrap">
                     {emp.FullName || `${emp.FirstName || ''} ${emp.LastName || ''}`.trim()}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-600 dark:text-darktext-muted whitespace-nowrap">
+                  <td className="px-3 py-3 text-slate-600 dark:text-darktext-muted whitespace-nowrap">
                     {emp.DepartmentName || emp.DepartmentID || '—'}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-600 dark:text-darktext-muted whitespace-nowrap">
+                  <td className="px-3 py-3 text-slate-600 dark:text-darktext-muted whitespace-nowrap">
                     {emp.DesignationName || emp.DesignationTitle || emp.DesignationID || '—'}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-[11px] text-slate-500 dark:text-darktext-muted truncate max-w-44">
+                  <td className="px-3 py-3 font-mono text-[11px] text-slate-500 dark:text-darktext-muted truncate max-w-44">
                     {emp.Email}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-600 dark:text-darktext-muted whitespace-nowrap">
+                  <td className="px-3 py-3 text-slate-600 dark:text-darktext-muted whitespace-nowrap">
                     {emp.Phone || '—'}
                   </td>
-                  <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-darktext-base whitespace-nowrap">
+                  <td className="px-3 py-3 font-medium text-slate-800 dark:text-darktext-base whitespace-nowrap">
                     {emp.Salary !== undefined ? `$${emp.Salary.toLocaleString()}` : '—'}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-600 dark:text-darktext-muted whitespace-nowrap">
+                  <td className="px-3 py-3 text-slate-600 dark:text-darktext-muted whitespace-nowrap">
                     {emp.HireDate ? new Date(emp.HireDate).toLocaleDateString() : '—'}
                   </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap">
+                  <td className="px-3 py-3 whitespace-nowrap">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                       emp.Status === 'Active'
                         ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300'
@@ -294,8 +289,7 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
+      </ExpandableTable>
     );
   }
 
@@ -303,7 +297,7 @@ export const ResultRenderer: React.FC<ResultRendererProps> = ({ result, toolName
   if (toolName === 'add_employee' || toolName === 'update_employee') {
     const isUpdate = toolName === 'update_employee';
     return (
-      <div className="my-2.5 p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 text-xs">
+      <div className="my-2.5 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 text-xs">
         <div className="font-semibold text-emerald-900 dark:text-emerald-300 flex items-center gap-2">
           <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span>{isUpdate ? 'Employee Updated Successfully' : 'Employee Registered Successfully'}</span>

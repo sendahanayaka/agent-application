@@ -55,7 +55,27 @@ impl IntentPipeline {
         let mut resolved_reference_label: Option<String> = None;
         let effective_prompt: String;
 
-        match ReferenceResolver::resolve(trimmed, context) {
+        if let Some((name, phone)) = Self::named_phone_update(trimmed) {
+            match self.resolve_update_employee(client, name) {
+                Ok(employee_id) => {
+                    effective_prompt = format!("Update employee ID {employee_id} phone number to {phone}");
+                    resolved_reference_label = Some(format!("{name} (Employee ID {employee_id})"));
+                }
+                Err((status, message)) => return PipelineResponse {
+                    status,
+                    prompt: trimmed.to_string(),
+                    detected_intents: vec!["update_employee".to_string()],
+                    selected_tools: vec![],
+                    message,
+                    pending_operation: None,
+                    tool_executions: vec![],
+                    missing_parameters: None,
+                    ambiguous_options: None,
+                    resolved_reference: None,
+                    conversation_context: context.clone(),
+                },
+            }
+        } else { match ReferenceResolver::resolve(trimmed, context) {
             ReferenceResolutionResult::FieldQuery { employee_id, resolved_label, target_field } => {
                 resolved_reference_label = Some(resolved_label.clone());
                 // Call get_employee_by_id on MCP server to get fresh data
@@ -76,6 +96,7 @@ impl IntentPipeline {
                         // Human friendly answer for the specific queried field
                         let data = parsed.get("data").unwrap_or(&parsed);
                         let field_val = match target_field.as_str() {
+                            "hire_date" => data.get("HireDate").and_then(Value::as_str).filter(|date| !date.is_empty()).unwrap_or("Not listed").to_string(),
                             "phone" => data.get("Phone").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
                             "email" => data.get("Email").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
                             "department" => data.get("DepartmentName").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
@@ -98,7 +119,15 @@ impl IntentPipeline {
                         };
 
                         let emp_name = data.get("FirstName").and_then(|v| v.as_str()).unwrap_or("Employee");
-                        let message = format!("{}'s {} is {}.", emp_name, label_desc, field_val);
+                        let message = if target_field == "hire_date" {
+                            if field_val == "Not listed" {
+                                format!("{}'s hire date is not listed.", emp_name)
+                            } else {
+                                format!("{} was hired on {}.", emp_name, field_val)
+                            }
+                        } else {
+                            format!("{}'s {} is {}.", emp_name, label_desc, field_val)
+                        };
 
                         return PipelineResponse {
                             status: PipelineStatus::Success,
@@ -150,6 +179,7 @@ impl IntentPipeline {
                         let data = parsed.get("data").unwrap_or(&parsed);
                         let name = format!("{} {}", data.get("FirstName").and_then(|v| v.as_str()).unwrap_or(""), data.get("LastName").and_then(|v| v.as_str()).unwrap_or("")).trim().to_string();
                         let field_val = match target_field.as_str() {
+                            "hire_date" => data.get("HireDate").and_then(Value::as_str).filter(|date| !date.is_empty()).unwrap_or("Not listed").to_string(),
                             "phone" => data.get("Phone").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
                             "email" => data.get("Email").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
                             "department" => data.get("DepartmentName").and_then(|v| v.as_str()).unwrap_or("None listed").to_string(),
@@ -172,7 +202,8 @@ impl IntentPipeline {
                 let message = if lines.is_empty() {
                     "No records found for the referenced employees.".to_string()
                 } else {
-                    format!("Here are their {}:\n{}", target_field, lines.join("\n"))
+                    let label = if target_field == "hire_date" { "hire dates" } else { &target_field };
+                    format!("Here are their {}:\n{}", label, lines.join("\n"))
                 };
 
                 return PipelineResponse {
@@ -226,7 +257,7 @@ impl IntentPipeline {
             ReferenceResolutionResult::NotApplicable => {
                 effective_prompt = trimmed.to_string();
             }
-        }
+        } }
 
         // 3. Break compound queries ("and", ";", "also") into sub-clauses
         let clauses = self.split_clauses(&effective_prompt);
@@ -664,6 +695,51 @@ impl IntentPipeline {
 
     fn is_compound_count_search(&self, intents: &[String]) -> bool {
         intents.contains(&"search_employees".to_string()) && intents.contains(&"get_employee_count".to_string())
+    }
+
+    fn named_phone_update(prompt: &str) -> Option<(&str, &str)> {
+        let pattern = Regex::new(
+            r"(?i)^(?:update|change|set|modify)\s+(?:employee\s+)?([\p{L}][\p{L}'’\-]*(?:\s+[\p{L}][\p{L}'’\-]*)+?)\s+(?:phone(?:\s+number)?|mobile(?:\s+number)?)\s+(?:with|to)\s+(\+?[0-9][0-9 ()\-]{5,18}[0-9])\s*[.!?]?$"
+        ).unwrap();
+        let captures = pattern.captures(prompt)?;
+        let name = captures.get(1)?.as_str();
+        let name = name.strip_suffix("'s").or_else(|| name.strip_suffix("’s")).unwrap_or(name);
+        let phone = captures.get(2)?.as_str();
+        (phone.bytes().filter(u8::is_ascii_digit).count() >= 7).then_some((name, phone))
+    }
+
+    fn resolve_update_employee(
+        &self,
+        client: &mut StdioMcpClient,
+        name: &str,
+    ) -> Result<i32, (PipelineStatus, String)> {
+        let unavailable = || (PipelineStatus::ExecutionError, "Employee lookup is currently unavailable. Try again or provide the employee ID.".to_string());
+        let search = client.get_cached_tools().get("search_employees").ok_or_else(unavailable)?;
+        if !search.input_schema.properties.contains_key("name")
+            || search.input_schema.required.iter().any(|field| field != "name")
+        {
+            return Err(unavailable());
+        }
+        let normalized_name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        let raw = client.call_tool("search_employees", json!({"name": normalized_name})).map_err(|_| unavailable())?;
+        let result = self.extract_tool_content(&raw);
+        if raw.get("isError").and_then(Value::as_bool) == Some(true)
+            || result.get("success").and_then(Value::as_bool) == Some(false)
+        {
+            return Err(unavailable());
+        }
+        let employees = ReferenceResolver::extract_employees_from_result("search_employees", &result);
+        let matches: Vec<_> = employees.iter()
+            .filter(|employee| employee.full_name.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase() == normalized_name.to_lowercase())
+            .collect();
+        match matches.as_slice() {
+            [employee] => Ok(employee.employee_id),
+            [] => Err((PipelineStatus::ValidationError, format!("No employee has the full name '{name}'. Check the spelling or provide the employee ID."))),
+            _ => {
+                let ids = matches.iter().map(|employee| employee.employee_id.to_string()).collect::<Vec<_>>().join(", ");
+                Err((PipelineStatus::AmbiguousIntent, format!("Multiple employees have the name '{name}'. Please use one of these employee IDs: {ids}.")))
+            }
+        }
     }
 
     fn prepare_tool_call(

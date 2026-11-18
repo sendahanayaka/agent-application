@@ -12,18 +12,19 @@ export const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ response }) 
   return (
     <div className="mt-2.5 border border-slate-200/90 dark:border-darkbg-border rounded-lg overflow-hidden bg-white/60 dark:bg-darkbg-secondary/40 text-xs text-slate-700 dark:text-darktext-muted">
       <button
+        aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
         className="w-full px-3 py-2 flex items-center justify-between bg-slate-50 dark:bg-darkbg-secondary hover:bg-slate-100 dark:hover:bg-darkbg-surface/80 transition-colors text-left font-medium text-slate-700 dark:text-darktext-base"
       >
         <span className="flex items-center gap-2">
-          <Terminal className="w-3.5 h-3.5 text-primary dark:text-orange-400" />
-          <span className="font-semibold text-[11px] tracking-wide">Execution Details</span>
+          <Terminal className="w-3.5 h-3.5 text-primary dark:text-emerald-300" />
+          <span className="font-semibold text-[11px] tracking-wide">Request details</span>
           <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-200/70 dark:bg-darkbg-surface text-slate-600 dark:text-darktext-muted">
             {response.selected_tools.length} {response.selected_tools.length === 1 ? 'tool' : 'tools'}
           </span>
         </span>
         <span className="flex items-center gap-1 text-slate-400 dark:text-darktext-muted text-[11px]">
-          {isOpen ? 'Hide technical logs' : 'Show technical logs'}
+          
           {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </span>
       </button>
@@ -37,7 +38,7 @@ export const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ response }) 
               <span className={`ml-1.5 font-semibold ${
                 response.status === 'success' ? 'text-emerald-700 dark:text-emerald-400' :
                 response.status === 'confirmation_required' ? 'text-amber-700 dark:text-amber-400' :
-                response.status === 'clarification_needed' ? 'text-blue-700 dark:text-blue-400' : 'text-rose-700 dark:text-rose-400'
+                response.status === 'clarification_needed' ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
               }`}>
                 {response.status}
               </span>
@@ -50,12 +51,12 @@ export const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ response }) 
             </div>
             <div className="col-span-2">
               <span className="text-slate-400 dark:text-darktext-muted font-medium">Selected Tool(s):</span>
-              <span className="ml-1.5 font-mono text-primary dark:text-orange-400 font-semibold">
+              <span className="ml-1.5 font-mono text-primary dark:text-emerald-300 font-semibold">
                 {response.selected_tools.length > 0 ? response.selected_tools.join(', ') : 'None'}
               </span>
             </div>
             {response.resolved_reference && (
-              <div className="col-span-2 bg-blue-50 dark:bg-blue-950/40 p-2 rounded-lg border border-blue-200 dark:border-blue-900/50 text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+              <div className="col-span-2 bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-lg border border-emerald-200 dark:border-emerald-900/50 text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
                 <span className="font-semibold text-[11px]">Context Reference:</span>
                 <span className="font-mono text-[11px] font-medium">{response.resolved_reference}</span>
               </div>
@@ -73,7 +74,7 @@ export const ExecutionDetails: React.FC<ExecutionDetailsProps> = ({ response }) 
             <div key={idx} className="pt-2.5 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 font-mono font-semibold text-slate-800 dark:text-darktext-base text-[11px]">
-                  <span className="px-1.5 py-0.2 rounded bg-primary/10 dark:bg-orange-500/20 text-primary dark:text-orange-400 text-[10px]">
+                  <span className="px-1.5 py-0.2 rounded bg-primary/10 dark:bg-emerald-500/20 text-primary dark:text-emerald-300 text-[10px]">
                     Step {idx + 1}
                   </span>
                   <span>{exec.tool_name}</span>

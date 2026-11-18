@@ -47,6 +47,37 @@ fn test_pipeline_get_employee_by_id() {
 }
 
 #[test]
+fn follow_up_returns_hire_date_and_named_phone_update_requires_confirmation() {
+    let (pipeline, mut client) = setup_test_pipeline();
+    let lookup = pipeline.process_prompt("Find employee ID 1001", &mut client);
+    assert_eq!(lookup.status, PipelineStatus::Success);
+    let employee = &lookup.tool_executions[0].result.as_ref().unwrap()["data"];
+    let date = employee["HireDate"].as_str().expect("Seeded hire date");
+    let name = format!(
+        "{} {}",
+        employee["FirstName"].as_str().unwrap(),
+        employee["LastName"].as_str().unwrap()
+    );
+    let follow_up = pipeline.process_prompt_with_context(
+        "when did he hired",
+        &lookup.conversation_context,
+        &mut client,
+    );
+    assert_eq!(follow_up.status, PipelineStatus::Success);
+    assert!(follow_up.message.contains(&format!("was hired on {date}")));
+
+    let update = pipeline.process_prompt(
+        &format!("update {name} phone number with 0711231234"),
+        &mut client,
+    );
+    assert_eq!(update.status, PipelineStatus::ConfirmationRequired);
+    let pending = update.pending_operation.unwrap();
+    assert_eq!(pending.tool_name, "update_employee");
+    assert_eq!(pending.arguments["employee_id"], 1001);
+    assert_eq!(pending.arguments["phone"], "0711231234");
+}
+
+#[test]
 fn test_pipeline_search_employees_by_department() {
     let (pipeline, mut client) = setup_test_pipeline();
     let resp = pipeline.process_prompt("Search employees in IT department", &mut client);

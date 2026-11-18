@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Bot, User, Sparkles } from 'lucide-react';
+import { flushSync } from 'react-dom';
+import { ArrowUp, Bot, User, Layers3, MessageCircle, Blocks, Plus, ContactRound, Network } from 'lucide-react';
 import { ChatMessage, HealthResponse, PipelineResponseModel, ToolInfo } from './types/api';
 import { apiClient } from './services/api';
 import { HealthIndicator } from './components/HealthIndicator';
@@ -44,7 +45,7 @@ function cleanAssistantText(rawText: string, toolExecutions?: PipelineResponseMo
         } else if (exec.tool_name === 'get_employee_by_id') {
           messages.push('Employee profile retrieved:');
         } else if (exec.tool_name === 'get_employee_count') {
-          messages.push('Employee headcount count:');
+          messages.push('Employee headcount:');
         }
       }
 
@@ -70,6 +71,13 @@ function cleanAssistantText(rawText: string, toolExecutions?: PipelineResponseMo
   return cleaned;
 }
 
+const suggestions = [
+  'Show all employees',
+  'Find employee ID 1003',
+  'Show all departments',
+  'How many employees are there?',
+];
+
 export const App: React.FC = () => {
   // Theme state: defaults to light, saved to localStorage
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -94,18 +102,20 @@ export const App: React.FC = () => {
   const [conversationId, setConversationId] = useState<string>(
     () => `conv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
   );
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      sender: 'assistant',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      text: "Hello! I am your Employee Management Agent.\n\nI can help you look up employee records, search personnel by department or job title, check employee headcount, and register or update staff records in SQL Server via our secure Model Context Protocol (MCP) server.\n\nTry asking:\n• \"List all employees\"\n• \"Search employees in IT department\"\n• \"Find employee with ID 101\"\n• \"How many employees are in Engineering?\"\n• \"Show all departments\"\n• \"Add employee Alice Johnson in HR with salary 75000\"",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const choosePrompt = (prompt: string) => {
+    flushSync(() => {
+      setInputPrompt(prompt);
+      setView('chat');
+    });
+    inputRef.current?.focus();
+  };
 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [view, setView] = useState<'chat' | 'tools'>('chat');
   const [inputPrompt, setInputPrompt] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [processingStep, setProcessingStep] = useState<string | null>(null);
 
   // Health and Tools state
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -123,12 +133,12 @@ export const App: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, processingStep]);
+  }, [messages, isSubmitting, isConfirming]);
 
   // Load health and tools on startup
   const fetchHealth = async () => {
@@ -169,6 +179,7 @@ export const App: React.FC = () => {
     if (e) e.preventDefault();
     const promptToSend = (overridePrompt || inputPrompt).trim();
     if (!promptToSend || isSubmitting) return;
+    inputRef.current?.focus({ preventScroll: true });
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -180,10 +191,8 @@ export const App: React.FC = () => {
     setMessages((prev) => [...prev, userMessage]);
     setInputPrompt('');
     setIsSubmitting(true);
-    setProcessingStep('Identifying intent & validating parameter schema in Rust...');
 
     try {
-      setProcessingStep('Executing parameterized MCP tool on SQL Server...');
       const response = await apiClient.sendChat(promptToSend, conversationId);
 
       const humanText = cleanAssistantText(response.message, response.tool_executions);
@@ -215,7 +224,6 @@ export const App: React.FC = () => {
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsSubmitting(false);
-      setProcessingStep(null);
     }
   };
 
@@ -257,20 +265,26 @@ export const App: React.FC = () => {
     const newId = `conv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     setConversationId(newId);
     setPendingConfirmation(null);
-    setMessages([
-      {
-        id: `welcome-${Date.now()}`,
-        sender: 'assistant',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        text: "Started a new conversation session.\n\nSession memory has been reset. How can I help you manage employee records today?",
-      },
-    ]);
+    setMessages([]);
+    setInputPrompt('');
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8] dark:bg-[#12131A] text-[#252525] dark:text-[#F5F6FA] flex flex-col font-sans transition-colors duration-200">
+    <div className={sidebarOpen ? "workspace" : "workspace sidebar-closed"}>
+      <aside className="side" id="workspace-sidebar">
+        <div className="wordmark" aria-label="People Desk"><span className="brand-mark"><Layers3 size={23} /></span><span className="side-label">People Desk</span></div>
+        <button className="new-chat" aria-label="New chat" title={sidebarOpen ? undefined : 'New chat'} disabled={isSubmitting || isConfirming} onClick={() => { setView('chat'); void handleNewConversation(); }}><Plus size={17} /><span className="side-label">New chat</span></button>
+        <nav aria-label="Workspace">
+          <p className="rail-label">Workspace</p>
+          <button aria-label="Assistant" title={sidebarOpen ? undefined : 'Assistant'} aria-current={view === 'chat' ? 'page' : undefined} onClick={() => setView('chat')}><MessageCircle /><span className="side-label">Assistant</span></button>
+          <button aria-label="Tool library" title={sidebarOpen ? undefined : 'Tool library'} aria-current={view === 'tools' ? 'page' : undefined} onClick={() => setView('tools')}><Blocks /><span className="side-label">Tool library</span></button>
+        </nav>
+      </aside>
+      <div className="stage">
       {/* 1. System Health Header with Theme Switcher */}
       <HealthIndicator
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(open => !open)}
         health={health}
         isLoading={isHealthLoading}
         onRefresh={() => {
@@ -279,63 +293,64 @@ export const App: React.FC = () => {
         }}
         isDark={isDark}
         onToggleTheme={toggleTheme}
-        onNewConversation={handleNewConversation}
+        title={view === 'chat' ? 'Assistant' : 'Tool library'}
       />
 
       {/* 2. MCP Tools Registry Bar */}
-      <ToolsPanel
+      {view === 'tools' ? <ToolsPanel
         tools={tools}
-        toolsCount={health?.tools_count || tools.length}
         isLoading={isToolsLoading}
-        onSelectPrompt={(sample) => {
-          setInputPrompt(sample);
-        }}
-      />
+        onSelectPrompt={choosePrompt}
+      /> : (
 
-      {/* 3. Main Conversational Chat Area */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col">
-        <div className="flex-1 bg-white dark:bg-darkbg-surface rounded-2xl shadow-xs border border-slate-200 dark:border-darkbg-border flex flex-col overflow-hidden transition-colors">
+
+      <main className="desk-main">
+        <div className="conversation">
+
           {/* Messages Scroll View */}
-          <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-5">
+          <div role="log" aria-label="Conversation" className="transcript space-y-5">
+            {messages.length === 0 && (
+              <div className="welcome-panel">
+                <div className="welcome-art" aria-hidden="true"><span className="art-card card-back"><Network /></span><span className="art-card card-front"><ContactRound /><i /><i /></span></div>
+                <h1>Ask about your team<span>.</span></h1>
+                <p>Find employee profiles, browse departments, and manage team records in one conversation.</p>
+              </div>
+            )}
             {messages.map((msg) => {
               const isUser = msg.sender === 'user';
 
               return (
                 <div
                   key={msg.id}
-                  className={`flex gap-3 max-w-3xl ${isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}
+                  className={`message flex gap-3 ${isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}
                 >
                   {/* Avatar */}
                   <div
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold shadow-2xs ${
-                      isUser
-                        ? 'bg-primary dark:bg-orange-600 text-white'
-                        : 'bg-primary-dark dark:bg-darkbg-secondary text-white dark:text-orange-400 border border-slate-300 dark:border-darkbg-border'
-                    }`}
+                    className="chat-brand w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
                   >
                     {isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                   </div>
 
                   {/* Message Bubble Container */}
-                  <div className={`space-y-1.5 max-w-[85%] ${isUser ? 'items-end' : 'items-start'}`}>
+                  <div className={`message-body min-w-0 space-y-1.5 max-w-[88%] ${isUser ? 'items-end' : 'items-start'}`}>
                     <div className="flex items-center gap-2 text-[11px] text-slate-400 dark:text-darktext-muted px-1">
                       <span className="font-semibold text-slate-600 dark:text-darktext-base">
-                        {isUser ? 'You' : 'Agent Assistant'}
+                        {isUser ? 'You' : 'Workforce assistant'}
                       </span>
                       <span>•</span>
                       <span>{msg.timestamp}</span>
                     </div>
 
                     <div
-                      className={`p-4 rounded-2xl text-xs md:text-sm leading-relaxed shadow-xs transition-colors ${
+                      className={`message-bubble p-4 rounded-2xl text-xs md:text-sm leading-relaxed shadow-xs transition-colors ${
                         isUser
-                          ? 'bg-primary dark:bg-orange-600 text-white rounded-tr-xs'
+                          ? 'chat-brand rounded-tr-xs'
                           : 'bg-slate-50 dark:bg-darkbg-secondary/70 text-slate-800 dark:text-darktext-base border border-slate-200 dark:border-darkbg-border rounded-tl-xs'
                       }`}
                     >
                       {/* Context Resolution Badge */}
                       {!isUser && msg.pipelineResponse?.resolved_reference && (
-                        <div className="mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/50">
+                        <div className="mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50">
                           <span className="font-semibold">Context Resolved:</span>
                           <span className="font-mono">{msg.pipelineResponse.resolved_reference}</span>
                         </div>
@@ -358,7 +373,7 @@ export const App: React.FC = () => {
                       )}
 
                       {/* Write Operation Confirmation Prompt Card in chat (if pending) */}
-                      {!isUser && msg.pipelineResponse?.pending_operation && (
+                      {!isUser && msg.pipelineResponse?.pending_operation && pendingConfirmation?.token === msg.pipelineResponse.pending_operation.confirmation_token && (
                         <ConfirmationCard
                           operation={msg.pipelineResponse.pending_operation}
                           isConfirming={isConfirming && pendingConfirmation?.token === msg.pipelineResponse.pending_operation.confirmation_token}
@@ -393,24 +408,11 @@ export const App: React.FC = () => {
               );
             })}
 
-            {/* In-Flight Processing Indicator */}
-            {isSubmitting && (
-              <div className="flex gap-3 max-w-xl mr-auto">
-                <div className="w-8 h-8 rounded-xl bg-primary-dark dark:bg-darkbg-secondary text-white dark:text-orange-400 flex items-center justify-center shrink-0">
-                  <Bot className="w-4 h-4 animate-pulse" />
-                </div>
-                <div className="bg-slate-50 dark:bg-darkbg-secondary border border-slate-200 dark:border-darkbg-border rounded-2xl rounded-tl-xs p-3.5 text-xs text-slate-600 dark:text-darktext-muted shadow-xs space-y-2">
-                  <div className="flex items-center gap-2 font-medium text-slate-800 dark:text-darktext-base">
-                    <span className="w-3.5 h-3.5 border-2 border-primary/30 dark:border-orange-500/30 border-t-primary dark:border-t-orange-400 rounded-full animate-spin" />
-                    <span>Processing Request...</span>
-                  </div>
-                  {processingStep && (
-                    <div className="font-mono text-[11px] text-primary dark:text-orange-400 bg-primary/5 dark:bg-orange-500/10 px-2.5 py-1 rounded-md border border-primary/10 dark:border-orange-500/20 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 animate-spin" />
-                      <span>{processingStep}</span>
-                    </div>
-                  )}
-                </div>
+            {(isSubmitting || isConfirming) && (
+              <div className="typing-indicator" role="status">
+                <Bot size={18} aria-hidden="true" />
+                <span className="sr-only">{isConfirming ? 'Saving changes' : 'Assistant is working'}</span>
+                <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>
               </div>
             )}
 
@@ -418,35 +420,38 @@ export const App: React.FC = () => {
           </div>
 
           {/* Prompt Input Form */}
-          <div className="p-3 bg-slate-50 dark:bg-darkbg-secondary border-t border-slate-200 dark:border-darkbg-border transition-colors">
-            <form onSubmit={handleSendMessage} className="flex gap-2">
+          <div className="composer">
+            <div className="suggestions" role="group" aria-label="Suggested messages">
+              {suggestions.map((prompt) => (
+                <button key={prompt} type="button" className="suggestion" disabled={isSubmitting || isConfirming}
+                  onClick={() => choosePrompt(prompt)}>
+                  {prompt}
+                </button>
+              ))}
+            </div>
+            <form onSubmit={handleSendMessage} className="compose-form">
               <input
                 type="text"
+                ref={inputRef}
+                aria-label="Your message"
                 value={inputPrompt}
                 onChange={(e) => setInputPrompt(e.target.value)}
-                placeholder="Ask about employees, departments, headcount, or request an add/update..."
-                disabled={isSubmitting}
-                className="flex-1 px-4 py-2.5 bg-white dark:bg-darkbg-surface border border-slate-300 dark:border-darkbg-border rounded-xl text-xs md:text-sm text-slate-900 dark:text-darktext-base placeholder-slate-400 dark:placeholder-darktext-muted focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-orange-500 focus:border-transparent transition-all disabled:opacity-50"
+                placeholder="Ask about your workforce…"
               />
               <button
                 type="submit"
                 disabled={!inputPrompt.trim() || isSubmitting}
-                className="px-4 py-2.5 bg-primary hover:bg-primary-light dark:bg-orange-600 dark:hover:bg-accent-hover disabled:bg-slate-300 dark:disabled:bg-darkbg-border text-white font-semibold rounded-xl text-xs md:text-sm shadow-xs transition-colors flex items-center gap-1.5 disabled:cursor-not-allowed"
+                aria-label="Send message"
+                title="Send message"
+                className="send-arrow"
               >
-                <span>Send</span>
-                <Send className="w-3.5 h-3.5" />
+                <ArrowUp size={23} strokeWidth={1.8} aria-hidden="true" />
               </button>
             </form>
-            <div className="mt-1.5 px-1 flex items-center justify-between text-[11px] text-slate-400 dark:text-darktext-muted">
-              <span>Deterministic Regex Routing • Zero LLM latency • Live SQL Server Access</span>
-              <span className="hidden sm:inline">Press Enter to send</span>
-            </div>
           </div>
         </div>
-      </main>
-
-      {/* 4. Write Confirmation Dialog (Modal - Optional alternative view) */}
-      {/* Both the in-chat professional card and confirmation actions directly execute the secure workflow */}
+      </main>)}
+      </div>
     </div>
   );
 };
