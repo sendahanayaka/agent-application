@@ -1,0 +1,349 @@
+{
+  "version": "1.0",
+  "description": "Deterministic vocabulary and intent definitions for Agentic Employee Management",
+  "intents": [
+    {
+      "intent_id": "get_all_employees",
+      "target_tool": "get_all_employees",
+      "is_write": false,
+      "description": "List all employees across the entire organization",
+      "action_verbs": [
+        "get", "show", "list", "fetch", "display", "retrieve", "view", "pull", "see", "print", "give"
+      ],
+      "entity_nouns": [
+        "employees", "staff", "workers", "team members", "colleagues", "personnel", "workforce", "all employees", "every employee", "roster"
+      ],
+      "phrases": [
+        "show all employees",
+        "list all employees",
+        "get all employees",
+        "fetch all employees",
+        "display all staff",
+        "view employee roster",
+        "show everyone",
+        "list the staff",
+        "who works here",
+        "show workforce",
+        "pull up employee list",
+        "give all the employees",
+        "give all employees"
+      ]
+    },
+    {
+      "intent_id": "get_employee_by_id",
+      "target_tool": "get_employee_by_id",
+      "is_write": false,
+      "description": "Retrieve specific employee by their numerical ID",
+      "action_verbs": [
+        "get", "find", "show", "lookup", "fetch", "display", "retrieve", "search", "view", "locate", "give"
+      ],
+      "entity_nouns": [
+        "employee", "staff member", "worker", "colleague", "record", "details", "profile"
+      ],
+      "phrases": [
+        "find employee id {id}",
+        "get employee {id}",
+        "lookup employee {id}",
+        "show employee with id {id}",
+        "show employee id {id}",
+        "employee details for {id}",
+        "who is employee {id}",
+        "fetch id {id}",
+        "profile of {id}"
+      ]
+    },
+    {
+      "intent_id": "search_employees",
+      "target_tool": "search_employees",
+      "is_write": false,
+      "description": "Search employees by name, department, designation, or employment status",
+      "action_verbs": [
+        "search", "find", "filter", "look for", "query", "seek", "show", "list", "get", "fetch", "display", "give"
+      ],
+      "entity_nouns": [
+        "employees", "staff", "people", "workers", "colleagues", "personnel", "team", "members", "engineers", "leads", "managers", "analysts", "executives", "designers", "accountants"
+      ],
+      "phrases": [
+        "search employees in {department} department",
+        "find employees with name {name}",
+        "find employees in {department}",
+        "search {department} staff",
+        "search for {name}",
+        "filter employees by status",
+        "show active employees",
+        "find software engineers in engineering",
+        "find senior software engineers",
+        "show senior software engineers",
+        "find project managers",
+        "show project managers"
+      ]
+    },
+    {
+      "intent_id": "get_department_list",
+      "target_tool": "get_department_list",
+      "is_write": false,
+      "description": "Retrieve the complete list of corporate departments",
+      "action_verbs": [
+        "get", "show", "list", "fetch", "display", "retrieve", "view", "give"
+      ],
+      "entity_nouns": [
+        "departments", "divisions", "units", "teams", "depts", "all departments", "department list"
+      ],
+      "phrases": [
+        "show all departments",
+        "list departments",
+        "get department list",
+        "what departments are there",
+        "show company divisions",
+        "list all units",
+        "view departments"
+      ]
+    },
+    {
+      "intent_id": "get_employee_count",
+      "target_tool": "get_employee_count",
+      "is_write": false,
+      "description": "Count total employees or count employees matching department/status filter",
+      "action_verbs": [
+        "count", "how many", "total", "number of", "calculate"
+      ],
+      "entity_nouns": [
+        "employees", "staff", "headcount", "workers", "people", "workforce", "them", "active employees", "inactive employees", "senior software engineers", "project managers", "software engineers", "engineers", "managers"
+      ],
+      "phrases": [
+        "how many employees are there",
+        "count all employees",
+        "total employee count",
+        "how many staff work here",
+        "headcount in {department}",
+        "count employees in {department}",
+        "count them",
+        "number of active employees",
+        "total number of staff",
+        "count active employees",
+        "count inactive employees",
+        "count senior software engineers",
+        "count project managers"
+      ]
+    },
+    {
+      "intent_id": "add_employee",
+      "target_tool": "add_employee",
+      "is_write": true,
+      "description": "Insert a new employee record (Requires explicit confirmation)",
+      "action_verbs": [
+        "add", "create", "insert", "register", "hire", "new", "onboard", "enroll"
+      ],
+      "entity_nouns": [
+        "employee", "staff member", "worker", "colleague", "new hire", "person"
+      ],
+      "phrases": [
+        "add a new employee named {name}",
+        "create employee {name}",
+        "register new hire {name}",
+        "onboard employee {name}",
+        "insert employee {name} into {department}",
+        "hire {name} as {designation}",
+        "add employee {name} with email {email}"
+      ]
+    },
+    {
+      "intent_id": "update_employee",
+      "target_tool": "update_employee",
+      "is_write": true,
+      "description": "Modify an existing employee record by ID (Requires explicit confirmation)",
+      "action_verbs": [
+        "update", "modify", "change", "edit", "set", "adjust", "revise", "promote", "transfer"
+      ],
+      "entity_nouns": [
+        "employee", "record", "details", "staff member", "profile"
+      ],
+      "phrases": [
+        "update employee {id} department to {department}",
+        "change employee {id} salary to {salary}",
+        "set employee {id} status to {status}",
+        "update {id} designation to {designation}",
+        "modify email of employee {id} to {email}",
+        "promote employee {id} to {designation}",
+        "transfer employee {id} to {department}"
+      ]
+    }
+  ],
+  "parameters": {
+    "employee_id": {
+      "type": "integer",
+      "description": "Numerical identifier for an employee",
+      "patterns": [
+        "(?:id|employee\\s*id|#|emp\\s*id)\\s*(?:is|to|:|=|#)?\\s*([0-9]{3,6})\\b",
+        "\\bemployee\\s+(?:id\\s+)?([0-9]{3,6})\\b",
+        "\\bid\\s+([0-9]{3,6})\\b",
+        "\\b([1-9][0-9]{3,5})\\b"
+      ]
+    },
+    "departments": {
+      "type": "lookup",
+      "description": "Known corporate departments matching InternAgenticDB",
+      "canonical_mapping": {
+        "Engineering": ["engineering", "software engineering"],
+        "IT": ["it", "information technology", "tech", "technology"],
+        "HR": ["hr", "human resources", "personnel", "people team"],
+        "Finance": ["finance", "accounting", "accounts", "payroll"],
+        "Sales": ["sales", "commercial", "business development", "bizdev"],
+        "Operations": ["operations", "ops", "logistics", "supply chain"]
+      },
+      "department_id_mapping": {
+        "1": "IT",
+        "2": "HR",
+        "3": "Finance",
+        "4": "Sales",
+        "5": "Engineering",
+        "6": "Operations"
+      }
+    },
+    "designations": {
+      "type": "lookup",
+      "description": "Known corporate designations matching InternAgenticDB",
+      "canonical_mapping": {
+        "Senior Software Engineer": [
+          "senior software engineers",
+          "senior software engineer",
+          "senior software developers",
+          "senior software developer",
+          "sr software engineers",
+          "sr software engineer",
+          "senior devs",
+          "senior dev",
+          "sr devs",
+          "sr dev",
+          "lead developers",
+          "lead developer"
+        ],
+        "Software Engineer": [
+          "software engineers",
+          "software engineer",
+          "software developers",
+          "software developer",
+          "developers",
+          "developer",
+          "programmers",
+          "programmer",
+          "swe"
+        ],
+        "Team Lead": [
+          "team leads",
+          "team lead",
+          "tech leads",
+          "tech lead",
+          "leads",
+          "lead"
+        ],
+        "Project Manager": [
+          "project managers",
+          "project manager",
+          "pms",
+          "pm"
+        ],
+        "QA Engineer": [
+          "qa engineers",
+          "qa engineer",
+          "quality assurance engineers",
+          "quality assurance engineer",
+          "testers",
+          "tester",
+          "qa"
+        ],
+        "Business Analyst": [
+          "business analysts",
+          "business analyst",
+          "bas",
+          "ba"
+        ],
+        "HR Executive": [
+          "hr executives",
+          "hr executive",
+          "hr officers",
+          "hr officer"
+        ],
+        "Accountant": [
+          "accountants",
+          "accountant",
+          "senior accountants",
+          "senior accountant",
+          "finance analysts",
+          "finance analyst"
+        ],
+        "Sales Executive": [
+          "sales executives",
+          "sales executive",
+          "sales reps",
+          "sales rep",
+          "account executives",
+          "account executive"
+        ],
+        "DevOps Engineer": [
+          "devops engineers",
+          "devops engineer",
+          "devops",
+          "sre",
+          "cloud engineers",
+          "cloud engineer"
+        ],
+        "UI/UX Designer": [
+          "ui/ux designers",
+          "ui/ux designer",
+          "ui designers",
+          "ui designer",
+          "ux designers",
+          "ux designer",
+          "designers",
+          "designer"
+        ],
+        "Intern": [
+          "interns",
+          "intern",
+          "trainees",
+          "trainee"
+        ]
+      },
+      "designation_id_mapping": {
+        "1": "Software Engineer",
+        "2": "Senior Software Engineer",
+        "3": "Team Lead",
+        "4": "Project Manager",
+        "5": "QA Engineer",
+        "6": "Business Analyst",
+        "7": "HR Executive",
+        "8": "Accountant",
+        "9": "Sales Executive",
+        "10": "DevOps Engineer",
+        "11": "UI/UX Designer",
+        "12": "Intern"
+      }
+    },
+    "statuses": {
+      "type": "enum",
+      "description": "Valid employee statuses stored in InternAgenticDB",
+      "canonical_mapping": {
+        "Active": ["active", "employed", "current", "working"],
+        "Inactive": ["inactive", "terminated", "fired", "resigned", "former", "left"],
+        "On Leave": ["on leave", "leave", "vacation", "absent", "maternity leave", "sick leave"]
+      }
+    },
+    "email": {
+      "type": "string",
+      "pattern": "\\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})\\b"
+    },
+    "salary": {
+      "type": "decimal",
+      "patterns": [
+        "(?:salary|compensation|pay|rate)\\s*(?:is|to|:|of)?\\s*\\$?([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?)\\b",
+        "(?:salary|compensation|pay|rate)\\s*\\$?\\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?)\\b",
+        "\\$([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?)\\b"
+      ]
+    },
+    "phone": {
+      "type": "string",
+      "pattern": "(?:phone\\s*(?:number)?|mobile|cell|tel)\\s*(?:of\\s+employee\\s+[0-9]+\\s+)?(?:is|to|:|as|=)?\\s*([0-9+()\\-\\.\\s]{7,20})\\b"
+    }
+  }
+}
